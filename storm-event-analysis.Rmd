@@ -1,0 +1,405 @@
+---
+title: "U.S. Storm Event Analysis - 1985"
+subtitle: "ANA 515 Assignment III"
+author: "Anbazhagan Naresh"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+header-style: centered
+output:
+  html_document:
+    theme:
+      bootswatch: morph
+---
+
+<!-- Include Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+
+```{css, echo=FALSE}
+h1.title {
+  text-align: center;
+  font-family: Montserrat;
+  color: navy;
+}
+.h3 {
+  text-align: left;
+  font-family: Montserrat;
+  color: navy;
+}
+.subtitle, .author, .date, .plot-title {
+  text-align: left;
+  font-family: Georgia;
+  font-size: 20px;
+  color: navy;
+}
+.subtitle {
+  margin-top: 2em;
+}
+.author {
+  margin-top: .5em;
+}
+.date {
+  margin-top: .5em;
+}
+.body, p {
+  text-align: justify;
+  text-justify: inter-word;
+  font-family: Montserrat;
+  color: navy;
+}
+
+h1, h2{
+  text-decoration: underline;
+  text-decoration-color: yellow;
+  text-underline-position: under;
+  color: navy;
+}
+
+```
+
+
+``` {r setup_packages, include = FALSE, warning=FALSE, message=FALSE}
+
+# Specifying a CRAN mirror
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+# List of required packages
+packages <- c("httr", "rvest", "dplyr", "stringr", "tidyr", "ggplot2", "lubridate", "knitr", "kableExtra", "DT")
+
+# Function to check and install missing packages
+check_packages <- function(pkgs){
+  new_pkgs <- pkgs[!(pkgs %in% installed.packages()[,"Package"])]
+  if(length(new_pkgs)) install.packages(new_pkgs, dependencies = TRUE)
+}
+
+# Call the function with the vector of packages
+check_packages(packages)
+
+# Load the packages with muted exception handling
+sapply(packages, function(pkg) {
+  if(!require(pkg, character.only = TRUE, quietly = TRUE)) {
+    install.packages(pkg, dependencies = TRUE)
+    require(pkg, character.only = TRUE, quietly = TRUE)
+  }
+})
+
+```
+
+
+```{r download-source-data, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Defining the URL for the data directory
+url <- "https://www1.ncdc.noaa.gov/pub/data/swdi/stormevents/csvfiles/"
+local_file <- "StormEvents_details-ftp_v1.0_d1985.csv"
+
+# Check if the file exists locally
+if (!file.exists(local_file)) {
+  # Scrape the web to find the most recent file for 1985
+  page <- read_html(url)
+  links <- page %>% html_nodes("a") %>% html_attr("href")
+  file_link <- links[grepl("StormEvents_details-ftp_v1.0_d1985", links)]
+  
+  if (length(file_link) > 0) {
+    # Get the most recent file
+    download_link <- paste0(url, file_link[1])
+    
+    # Download the file
+    download.file(download_link, destfile = local_file, method = "curl")
+    message("File downloaded successfully.")
+  } else {
+    stop("No suitable file found on the website.")
+  }
+} else {
+  message("Local file found and will be used.")
+}
+```
+
+
+### Synopsis:
+
+This analysis explores storm events in the United States for the year 1985 using data from NOAA's Storm Events Database. The dataset includes major weather-related storm events with details such as start and end dates, location, associated deaths, injuries, property damage, and other characteristics. The objective is to understand the distribution and characteristics of these events across different states, regions, and seasons. The raw dataset is linked to the below table:
+
+
+```{r load-data, echo=FALSE, message=FALSE, warning=FALSE}
+# Load the processed data
+data <- read.csv(local_file)
+
+# Check the column names
+#colnames(data)
+
+# Limiting the dataframe to the specified columns
+filtered_columns <- c('BEGIN_YEARMONTH', 'EPISODE_ID', 'STATE', 'STATE_FIPS', 'CZ_NAME', 'CZ_TYPE', 'CZ_FIPS', 'EVENT_TYPE')
+data <- data[filtered_columns]
+
+# Arranging the data by state name
+data <- data %>% arrange(STATE)
+
+# Changing state and county names to title case
+data$STATE <- str_to_title(data$STATE)
+data$CZ_NAME <- str_to_title(data$CZ_NAME)
+
+# Limiting to events listed by county FIPS (CZ_TYPE of 'C') and removing the CZ_TYPE column
+data <- data %>% filter(CZ_TYPE == 'C') %>% select(-CZ_TYPE)
+
+# Padding the state and county FIPS with '0' at the beginning and uniting the two columns to make one FIPS column
+data$STATE_FIPS <- str_pad(data$STATE_FIPS, width = 3, side = "left", pad = "0")
+data$CZ_FIPS <- str_pad(data$CZ_FIPS, width = 3, side = "left", pad = "0")
+data$FIPS <- paste0(data$STATE_FIPS, data$CZ_FIPS)
+
+# Changing all column names to lower case
+colnames(data) <- tolower(colnames(data))
+
+# Display the first few rows of the data
+datatable(data, options = list(pageLength = 5, scrollX = TRUE))
+```
+
+
+The data was filtered to include only events listed by county FIPS, state and county names were converted to title case, and FIPS codes were padded to ensure consistency. The data was then merged with additional state information (area and region).
+
+```{r merge-data, echo=FALSE, message=FALSE, warning=FALSE}
+# Load the built-in state data
+data("state")
+
+# Create a dataframe with state name, area, and region
+state_info <- data.frame(
+  state = str_to_title(state.name),
+  area = state.area,
+  region = state.region
+)
+
+# Create a dataframe with the number of events per state
+events_per_state <- data %>%
+  group_by(state) %>%
+  summarise(events = n())
+
+# Merge the state information dataframe with the events per state dataframe
+merged_data <- merge(events_per_state, state_info, by = "state")
+
+# Remove any states that are not in the state information dataframe
+merged_data <- merged_data %>%
+  filter(!is.na(region))
+
+# Display the merged data
+kable(head(merged_data), format = "html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+```{r save-data, echo=FALSE}
+# Save the merged data for further inspection if needed
+write.csv(merged_data, "merged_data.csv", row.names = FALSE)
+```
+
+
+### Summary table:
+
+The summary table provides an overview of the total events, average events per month, and the area of each state.
+
+```{r summarized-table, echo=FALSE}
+summary_table <- merged_data %>%
+  mutate(avg_events_per_month = events / 12) %>%
+  select(state, events, avg_events_per_month, area, region)
+
+# Display the summary table
+kable(summary_table, col.names = c("State", "Total Events", "Avg Events per Month", "Area (sq miles)", "Region"), 
+      format = "html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+## Visualizations
+
+### Bar Plot of Events per Region
+
+The bar plot below shows the total number of storm events in 1985 by region. The Midwest and South regions have the highest number of events.
+
+```{r bar-plot, echo=FALSE, warning=FALSE, fig.width=10, fig.height=6}
+ggplot(merged_data, aes(x = region, y = events, fill = region)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Total Number of Storm Events in 1985 by Region",
+    x = "Region",
+    y = "Number of Events"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+
+### Box Plot of Events per Region
+
+The box plot below displays the distribution of storm events in 1985 by region. The South region shows a wide range of event counts with some outliers, indicating variability in storm activity.
+
+```{r box-plot-of-events-region, echo=FALSE, warning=FALSE, fig.width=10, fig.height=6}
+ggplot(merged_data, aes(x = region, y = events, fill = region)) +
+  geom_boxplot() +
+  labs(
+    title = "Distribution of Storm Events in 1985 by Region",
+    x = "Region",
+    y = "Number of Events"
+  ) +
+  theme_minimal()
+```
+
+
+### Histogram of Event Distribution
+
+The histogram below shows the distribution of the number of events in 1985. The majority of states experienced fewer than 500 events, with some states experiencing significantly higher numbers.
+
+```{r histogram-of-event-dist, echo=FALSE, warning=FALSE, fig.width=10, fig.height=6}
+ggplot(merged_data, aes(x = events, fill = region)) +
+  geom_histogram(binwidth = 10, alpha = 0.7, position = "identity") +
+  labs(
+    title = "Histogram of Storm Events in 1985",
+    x = "Number of Events",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+```
+
+
+### Scatter Plot of Events by State Area
+
+The scatter plot below visualizes the number of events by state area. There is no clear relationship between the size of the state and the number of storm events.
+
+```{r scatter-plot-by-area, echo=FALSE, warning=FALSE, fig.width=10, fig.height=6}
+ggplot(merged_data, aes(x = area, y = events, color = region)) +
+  geom_point(size = 3, alpha = 0.7) +
+  labs(
+    title = "Scatter Plot of Events by State Area",
+    x = "State Area (sq miles)",
+    y = "Number of Events"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14, color = "slateblue"))
+```
+
+
+### Heatmap of Events by State and Month
+
+The heatmap below shows the number of storm events by state and month in 1985. This visualization helps to identify patterns and peak periods of storm activity for each state.
+
+```{r heatmap-by-month, echo=FALSE, warning=FALSE, fig.width=10, fig.height=6}
+
+# Adding year and month columns for the heatmap
+data$year <- as.integer(substr(data$begin_yearmonth, 1, 4))
+data$month <- as.integer(substr(data$begin_yearmonth, 5, 6))
+
+events_by_month <- data %>%
+  group_by(state, month) %>%
+  summarise(events = n(), .groups = 'drop')
+
+ggplot(events_by_month, aes(x = factor(month), y = state, fill = events)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "red") +
+  labs(
+    title = "Heatmap of Events by State and Month in 1985",
+    x = "Month",
+    y = "State",
+    fill = "Number of Events"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14, color = "slateblue"))
+
+```
+
+### Pie Chart of Event Types
+
+
+```{r event-chart, echo=FALSE, warning=FALSE, fig.width=10, fig.height=6}
+event_type_counts <- data %>%
+  group_by(event_type) %>%
+  summarise(events = n()) %>%
+  arrange(desc(events))
+
+event_type_counts$fraction <- event_type_counts$events / sum(event_type_counts$events)
+event_type_counts$ymax <- cumsum(event_type_counts$fraction)
+event_type_counts$ymin <- c(0, head(event_type_counts$ymax, n=-1))
+
+ggplot(event_type_counts, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=event_type)) +
+  geom_rect() +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  labs(
+    title = "Pie Chart of Event Types",
+    fill = "Event Type"
+  ) +
+  theme_void() +
+  theme(plot.title = element_text(size = 14, color = "slateblue"), legend.position = "right")
+```
+
+
+### Seasonal Patterns
+
+The analysis of seasonal patterns helps to understand how storm events are distributed throughout the year.
+
+##### Defining Seasons
+To analyze the seasonal patterns, the data was divided into four seasons:
+
+Winter: January, February, December
+
+Spring: March, April, May
+
+Summer: June, July, August
+
+Fall: September, October, November
+
+The bar plot below shows the number of storm events in 1985 for each season. Summer had the highest number of storm events, followed by Spring.
+
+
+```{r season-chart, echo=FALSE, warning=FALSE, fig.width=10, fig.height=6}
+# Add month column
+data$month <- as.integer(substr(data$begin_yearmonth, 5, 6))
+
+# Define seasons
+data <- data %>%
+  mutate(season = case_when(
+    month %in% c(12, 1, 2) ~ "Winter",
+    month %in% c(3, 4, 5) ~ "Spring",
+    month %in% c(6, 7, 8) ~ "Summer",
+    month %in% c(9, 10, 11) ~ "Fall"
+  ))
+
+# Summarize data by season
+events_by_season <- data %>%
+  group_by(season) %>%
+  summarise(events = n()) %>%
+  arrange(factor(season, levels = c("Winter", "Spring", "Summer", "Fall")))
+
+# Bar plot of events by season
+ggplot(events_by_season, aes(x = season, y = events, fill = season)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Number of Storm Events by Season in 1985",
+    x = "Season",
+    y = "Number of Events"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14, color = "slateblue"), legend.position = "none")
+```
+
+
+### Line Plot of Events Over Time
+
+The line plot below shows the number of storm events each month in 1985. The peak is observed in June, indicating increased storm activity during early summer.
+
+```{r line-plot-time-series, echo=FALSE, warning=FALSE, fig.width=10, fig.height=6}
+
+events_by_month <- data %>%
+  group_by(month) %>%
+  summarise(events = n())
+
+# Print the data to verify
+# kable(events_by_month, format = "html") %>%
+#  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+ggplot(events_by_month, aes(x = month, y = events)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "red", size = 2) +
+  scale_x_continuous(breaks = 1:12, labels = month.abb) +
+  labs(
+    title = "Line Plot of Events Over Time by Month",
+    x = "Month",
+    y = "Number of Events"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14, color = "slateblue"))
+
+```
+
