@@ -2,7 +2,10 @@
 
 ## Overview
 
-This project analyzes storm events in the United States for the year 1985 using data from NOAA's Storm Events Database. The dataset includes major weather-related storm events with details such as start and end dates, locations, associated deaths, injuries, property damage, and other characteristics. The analysis aims to understand the distribution and characteristics of these events across different states, regions, and seasons.
+This project analyzes storm events in the United States for the year 1985 using data from NOAA's Storm Events Database. The dataset includes major weather-related storm events, including start and end dates, locations, associated deaths, injuries, property damage, and other characteristics. The analysis aims to understand the distribution and characteristics of these events across different states, regions, and seasons.
+
+## Access the analysis
+You can view the full analysis [here](https://anbazhaganjr.github.io/ana-515-week-vi/storm-event-analysis.html)
 
 ## Data Source
 
@@ -11,7 +14,7 @@ The data used in this analysis is sourced from the [NOAA Storm Events Database](
 ## Project Structure
 
 - **storm-event-analysis.Rmd**: The main R Markdown file containing the analysis code and visualizations.
-- **merged_data.csv**: The processed and merged data file saved for further inspection and use.
+- **merged_data.csv**: The processed and merged data file is saved for further inspection and use.
 
 ## Analysis Steps
 
@@ -22,10 +25,10 @@ The data used in this analysis is sourced from the [NOAA Storm Events Database](
 
 2. **Data Cleaning and Transformation**:
 
-   - State and county names are converted to title case.
+   - State and county names are converted to title cases.
    - State and county FIPS codes are padded with "0" to ensure consistency.
    - A unified FIPS column is created by merging state and county FIPS codes.
-   - Column names are converted to lower case for consistency.
+   - Column names are converted to lowercase for consistency.
 
 3. **Data Integration**:
 
@@ -43,7 +46,7 @@ The data used in this analysis is sourced from the [NOAA Storm Events Database](
 
 ## Key Analysis
 
-- **Highest Storm Activity**: The Midwest and South regions had the highest number of storm events.
+- **Highest Storm Activity**: The Midwest and South regions had the highest storm events.
 - **Seasonal Peaks**: Summer experienced the most storm events, with a notable peak in June.
 - **State Variability**: States in the South showed significant variability in storm event counts.
 - **Outliers**: Some states exhibited significantly higher numbers of storm events, indicating potential areas for further investigation.
